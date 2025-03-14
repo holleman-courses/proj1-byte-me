@@ -2,11 +2,17 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
+import os
+import numpy as np
 
 # Define dataset path
 DATASET_PATH = "dataset/"
 IMG_SIZE = (150, 150)
 BATCH_SIZE = 5
+
+# Verify dataset path exists
+if not os.path.exists(DATASET_PATH):
+    raise FileNotFoundError(f"Dataset path '{DATASET_PATH}' not found.")
 
 # Apply data augmentation
 datagen = ImageDataGenerator(
@@ -39,32 +45,53 @@ val_generator = datagen.flow_from_directory(
     subset="validation"
 )
 
+# **Fix: Swap Labels if Needed**
+expected_labels = {'cats': 1, 'dogs': 0}
+
+if train_generator.class_indices['cats'] == 0:
+    print("\nWARNING: Class labels are flipped! Fixing them in code...")
+    train_generator.class_indices = expected_labels  # Force correct labels
+    val_generator.class_indices = expected_labels
+    train_generator.classes = np.abs(train_generator.classes - 1)  # Swap 0 ↔ 1
+    val_generator.classes = np.abs(val_generator.classes - 1)  # Swap 0 ↔ 1
+
+# Print dataset details
+print("\nDataset Details")
 print(f"Training set size: {train_generator.samples}")
 print(f"Validation set size: {val_generator.samples}")
 
-# Define CNN model
+print(f"Class labels: {train_generator.class_indices}")  # {'cats': 1, 'dogs': 0}
+print(f"Positive images (Cats): {sum(train_generator.classes == 1)}")
+print(f"Negative images (Dogs): {sum(train_generator.classes == 0)}\n")
+
+# **Optimized Model with Fewer Parameters**
+base_model = keras.applications.MobileNetV2(input_shape=(150, 150, 3), include_top=False, weights="imagenet")
+base_model.trainable = False  # Freeze base layers
+
 model = keras.Sequential([
-    layers.Conv2D(32, (3,3), activation='relu', input_shape=(150,150,3)),
-    layers.MaxPooling2D(2,2),
-    layers.Conv2D(64, (3,3), activation='relu'),
-    layers.MaxPooling2D(2,2),
-    layers.Conv2D(128, (3,3), activation='relu'),
-    layers.MaxPooling2D(2,2),
-    layers.Flatten(),
-    layers.Dense(512, activation='relu'),
+    base_model,
+    layers.GlobalAveragePooling2D(),  # Reduces parameter count
+    layers.Dense(128, activation='relu'),
+    layers.Dropout(0.3),
     layers.Dense(1, activation='sigmoid')
 ])
+
+# Print model structure
+print("\nModel Summary")
+model.summary()
+print(f"\nTotal Trainable Parameters: {model.count_params()}")
 
 # Compile model
 model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
 
 # Train model
-history = model.fit(train_generator, validation_data=val_generator, epochs=10)
+history = model.fit(train_generator, validation_data=val_generator, epochs=5)
 
-# Save trained model
-model.save("model.h5")
+# Save trained model WITHOUT optimizer state to reduce file size
+model.save("model.h5", include_optimizer=False)
 
-# Print training accuracy
+# Print final accuracy
+print("\nFinal Training Results")
 print(f"Final Training Accuracy: {history.history['accuracy'][-1]:.2f}")
 print(f"Final Validation Accuracy: {history.history['val_accuracy'][-1]:.2f}")
-print("Model saved as model.h5")
+print("Optimized model saved as model.h5")

@@ -1,3 +1,0 @@
-My model.h5 file was 250 MB, too large to be pushed to Git given is maximum of 100 MB.
-
-My model.h5 file is available at https://drive.google.com/file/d/1L42zfCjbkZh65-qzTi9Eze4sEnZBuxyb/view?usp=sharing
